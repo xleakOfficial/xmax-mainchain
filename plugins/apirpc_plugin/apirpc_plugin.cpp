@@ -18,6 +18,7 @@ namespace xmax {
 
 	static const char* const kHttpApiAddressOp = "http-api-address";
 	static const char* const kAllowCrossOriginOp = "api-allow-cross-origin";
+	static const char* const kAllowCendentialOp = "access_control_allow_credentials";
 	
 	namespace {
 		/*
@@ -139,6 +140,7 @@ namespace xmax {
 		//Events
 		void OnRead(boost::system::error_code ec, std::size_t bytes_transferred);	
 		void OnWrite(boost::system::error_code ec, bool close);
+		void OnTimer(boost::system::error_code ec);
 
 	private:
 		bool IsValidRequestVerb(const http::verb& req_method) const {
@@ -161,6 +163,7 @@ namespace xmax {
 		boost::asio::strand<boost::asio::io_context::executor_type> strand_;
 		Queue queue_;
 		HttpHandlerFunc http_handler_;
+		boost::asio::steady_timer timer_;
 	};
 
 
@@ -169,7 +172,8 @@ namespace xmax {
 		socket_(std::move(socket)),
 		strand_(socket.get_executor()),
 		queue_(*this),
-		http_handler_(http_handler)
+		http_handler_(http_handler),
+		timer_(socket.get_executor().context(), (std::chrono::steady_clock::time_point::max)())
 	{
 
 	}
@@ -322,6 +326,34 @@ namespace xmax {
 
 
 	//--------------------------------------------------
+	void HttpSession::OnTimer(boost::system::error_code ec)
+	{
+		if (ec && ec != boost::asio::error::operation_aborted) {
+			ErrorSprintf("Http session on timer failed with error message:%s", ec.message().c_str());
+			return;
+		}
+
+		// Verify that the timer really expired since the deadline may have moved.
+		if (timer_.expiry() <= std::chrono::steady_clock::now())
+		{
+			// Closing the socket cancels all outstanding operations. They
+			// will complete with boost::asio::error::operation_aborted
+			socket_.shutdown(tcp::socket::shutdown_both, ec);
+			socket_.close(ec);
+			return;
+		}
+
+		timer_.async_wait(
+			boost::asio::bind_executor(
+				strand_,
+				std::bind(
+					&HttpSession::OnTimer,
+					shared_from_this(),
+					std::placeholders::_1)));
+			
+	}
+
+	//--------------------------------------------------
 	void HttpSession::DoClose()
 	{
 		boost::system::error_code ec;
@@ -413,7 +445,7 @@ namespace xmax {
 	{
 		if (ec) {
 			ErrorSprintf("HttpListener OnAccpet occurs a error message:%s", ec.message().c_str());
-			return;
+			return;	
 		}
 		else {
 			//TODO: Run sesson
@@ -457,6 +489,7 @@ namespace xmax {
 		//Configurations
 		string allow_cross_origin;
 		string http_api_address;
+		string allow_credentials;
 
 		//IO
 		boost::asio::io_context ioc;
@@ -520,9 +553,23 @@ namespace xmax {
 			{
 				auto[status, body] = handler_res.value();
 				res.emplace((boost::beast::http::status)status, req.version());
+				res->set(http::field::server, BOOST_BEAST_VERSION_STRING);
+				if (!allow_cross_origin.empty())
+				{
+					res->set(http::field::access_control_allow_origin, allow_cross_origin);
+				}			
+				
+				if (!allow_credentials.empty())
+				{
+					res->set(http::field::access_control_allow_credentials, allow_credentials);
+				}
+				
+				res->set(http::field::content_type, "application/json");
+				res->body() = body;
 			}
-		}
+		}	
 
+	
 		return res;
 	}
 
@@ -542,6 +589,8 @@ namespace xmax {
 			(kAllowCrossOriginOp, xpo::value<std::string>()->default_value("*"), "default api rpc http address(ip:port)");
 
 
+		cfg.add_options()
+			(kAllowCendentialOp, xpo::value<std::string>()->default_value("true"), "allow credentials access control.");
 	}
 
 
@@ -583,7 +632,7 @@ namespace xmax {
 	//--------------------------------------------------
 	void ApiRpcPlugin::AddUrlHandler(std::string_view url, UrlHandler handler)
 	{
-
+		impl_->AddUrlHandler(url, handler);
 	}
 
 	//--------------------------------------------------

@@ -19,15 +19,39 @@ namespace chain
 		init();
 	}
 
+	ChainContext::~ChainContext()
+	{
+		if (db_)
+		{
+			db_->Close();
+		}
+		db_.reset();
+	}
+
+	void ChainContext::Flush()
+	{
+		db_->Flush();
+	}
+
 	void ChainContext::BuildBlock()
 	{
-		Logf("building block.");
+		pending_ = std::make_unique<PendingBlock>(db_->StartUndo());
+
+		pending_->PushDB();
+
+		db_->Commit(pending_->undopatch.GetRevision());
+		pending_.reset();
 	}
+
+
 
 	void ChainContext::init()
 	{
-		db_.reset(ChainDB::InitDB(config_.DBDir, config_.DBFileSize));
+		//db_.reset(ChainDB::InitDB(fs::current_path(), 1024 * 1024));
+		db_.reset(ChainDB::InitDB(config_.DBDir, config_.DBFileSize * MB_SIZE));
 
 		InitSystemTables(getDB());
+
+		Flush();
 	}
 }

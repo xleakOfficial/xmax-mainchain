@@ -32,10 +32,12 @@ namespace xmax
 	private:
 		// output logs
 		void Test(const char* strlog);
-		// TODO : clean 
+		//  clean 
 		void Clean();
 		// create contract
 		void CreateContract();
+		// free the all contracts
+		void FreeAllContracts();
 
 	private:
 		// contract code implement

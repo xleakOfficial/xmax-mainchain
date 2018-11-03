@@ -25,12 +25,20 @@ namespace xmax
 		cfg.DBDir = GetApp()->GetDataDir() / "db";
 		cfg.DBFileSize = options.at("db-runtime-size").as<uint64_t>();
 
-		IChainContext* c = IChainContext::InitContext(ChainConfig());
+		IChainContext* c = IChainContext::InitContext(cfg);
 		context_.reset(c);
 	}
 
 	void BlockChainPlugin::Startup()
 	{
+		Super::Startup();
+	}
+
+	void BlockChainPlugin::Shutdown()
+	{
+		context_->Flush();
+		context_.reset();
+		Super::Shutdown();
 
 	}
 

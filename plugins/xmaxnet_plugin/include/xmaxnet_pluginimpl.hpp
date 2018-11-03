@@ -2,10 +2,12 @@
 
 #include <boost/asio/ip/tcp.hpp>
 #include <boost/asio/ip/host_name.hpp>
+#include <boost/asio/steady_timer.hpp>
 
 #include "app_types.hpp"
 #include "pro/types/generictypes.hpp"
 
+#include <memory>
 
 namespace xmax
 {
@@ -24,11 +26,17 @@ public:
 	~XmaxNetPluginImpl();
 public:
 	/**
-	* Init p2p newwork params
+	* Init p2p network params
 	*/
 	void Init(const VarsMap& options);
-
+	/**
+	* start p2p network
+	*/
 	void StartupImpl();
+	/**
+	* delay start
+	*/
+	void Startup();
 
 	void ConnectImpl(const std::string& host);
 
@@ -51,6 +59,8 @@ public:
 
 	//send addr to peers
 	void BroadCastAddr(const std::string& addr);
+
+	void StartPendingTimer();
 
 public:
 
@@ -94,6 +104,9 @@ private:
 	const boost::asio::io_service&							ioService_;
 	boost::asio::deadline_timer								connectionTimer_;
 	boost::asio::deadline_timer								sendAddrsTimer_;
+	boost::asio::deadline_timer								delayNetStartTimer_;
+	std::unique_ptr<boost::asio::steady_timer>				pendingBlocksTimer_;
+	boost::asio::steady_timer::duration						sendPengdingBlocksPeriod_;
 };
 
 

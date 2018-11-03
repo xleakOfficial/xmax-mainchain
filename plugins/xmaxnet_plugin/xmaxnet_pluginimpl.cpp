@@ -18,6 +18,8 @@
 #include "miniupnpcstrings.h"
 #endif
 
+#include <boost/bind.hpp>
+
 namespace xmax
 {
 	using namespace pro;
@@ -38,6 +40,7 @@ XmaxNetPluginImpl::XmaxNetPluginImpl(const boost::asio::io_service& io)
 		connectionTimer_(const_cast<boost::asio::io_service&>(io)),
 		sendAddrsTimer_(const_cast<boost::asio::io_service&>(io)),
 		ioService_(io),
+		delayNetStartTimer_(const_cast<boost::asio::io_service&>(io)),
 		bUpnp_(false)
 {
 
@@ -99,6 +102,8 @@ void XmaxNetPluginImpl::Init(const VarsMap& options)
 	{
 		peerAddressList_ = options.at(s_PeerAddress).as<std::vector<std::string>>();
 	}
+
+	sendPengdingBlocksPeriod_ = std::chrono::seconds(1);
 }
 
 void XmaxNetPluginImpl::StartupImpl()
@@ -126,6 +131,14 @@ void XmaxNetPluginImpl::StartupImpl()
 	}
 
 	_SendAddrsTimer();
+}
+
+void XmaxNetPluginImpl::Startup()
+{
+	int64_t start_delay = 1000000;
+
+	delayNetStartTimer_.expires_from_now(boost::posix_time::microseconds(start_delay));
+	delayNetStartTimer_.async_wait(boost::bind(&XmaxNetPluginImpl::StartupImpl, this));
 }
 
 void XmaxNetPluginImpl::StartListen()
@@ -360,7 +373,7 @@ bool XmaxNetPluginImpl::_IsConnectd(const std::string& host)
 void XmaxNetPluginImpl::_ConnectionTimer()
 {
 	TimeMicroseconds time(2000000);
-	connectionTimer_.expires_from_now(boost::posix_time::microseconds(time.GetValue()));
+	connectionTimer_.expires_from_now(boost::posix_time::microseconds(time.count()));
 	connectionTimer_.async_wait(std::bind(&XmaxNetPluginImpl::_CheckConnection, this));
 }
 
@@ -385,7 +398,7 @@ void XmaxNetPluginImpl::_CheckConnection()
 void XmaxNetPluginImpl::_SendAddrsTimer()
 {
 	TimeMicroseconds time(30000000);
-	sendAddrsTimer_.expires_from_now(boost::posix_time::microseconds(time.GetValue()));
+	sendAddrsTimer_.expires_from_now(boost::posix_time::microseconds(time.count()));
 	sendAddrsTimer_.async_wait(std::bind(&XmaxNetPluginImpl::_SendAddrs, this));
 }
 
@@ -521,5 +534,26 @@ void XmaxNetPluginImpl::BroadCastAddr(const std::string& addr)
 	}
 }
 
+void XmaxNetPluginImpl::StartPendingTimer()
+{
+	pendingBlocksTimer_->expires_from_now(sendPengdingBlocksPeriod_);
+	pendingBlocksTimer_->async_wait([&, this](boost::system::error_code ec)
+	{
+		StartPendingTimer();
+		if (!ec)
+		{
+			for (auto c : connections_)
+			{
+				if (c->GetConStatus() == CS_CONNECTED)
+				{
+				}
+			}
+		}
+		else
+		{
+			LogSprintf("Error from start_pending_blocks_timer: ${m}", ("m", ec.message()));
+		}
+	});
+}
 
 }

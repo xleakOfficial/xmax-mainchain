@@ -37,6 +37,8 @@ namespace pro {
 
 	class LogMessageImpl {
 	public:
+		LogMessageImpl() {}
+
 		LogMessageImpl(const std::string& content, const LogContext& context) :
 			msg_content(content),
 			log_context(context)
@@ -72,6 +74,21 @@ namespace pro {
 		impl_(std::make_shared<LogMessageImpl>(msg_contet, context))
 	{
 
+	}
+
+
+	//--------------------------------------------------
+	LogMessage::LogMessage():
+		impl_(std::make_shared<LogMessageImpl>())
+	{
+
+	}
+
+
+	//--------------------------------------------------
+	LogMessage::~LogMessage()
+	{
+		impl_.reset();
 	}
 
 	//--------------------------------------------------
